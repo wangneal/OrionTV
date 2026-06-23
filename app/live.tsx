@@ -12,6 +12,7 @@ import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
 import { DeviceUtils } from "@/utils/DeviceUtils";
 import Toast from "react-native-toast-message";
 import Logger from "@/utils/Logger";
+import useAuthStore from "@/stores/authStore";
 
 const logger = Logger.withTag('Live');
 
@@ -33,6 +34,7 @@ export default function LiveScreen() {
   const responsiveConfig = useResponsiveLayout();
   const commonStyles = getCommonResponsiveStyles(responsiveConfig);
   const { deviceType, spacing } = responsiveConfig;
+  const { isLoggedIn } = useAuthStore();
 
   const [channels, setChannels] = useState<Channel[]>([]);
   const [groupedChannels, setGroupedChannels] = useState<Record<string, Channel[]>>({});
@@ -109,7 +111,7 @@ export default function LiveScreen() {
       }
     };
     loadChannels();
-  }, [showChannelTitle]);
+  }, [showChannelTitle, isLoggedIn]);
 
   const handleSelectChannel = useCallback((channel: Channel) => {
     const globalIndex = channels.findIndex((c) => c.id === channel.id);

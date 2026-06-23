@@ -89,6 +89,7 @@ const LoginModal = () => {
       await api.login(isLocalStorage ? undefined : username, password);
       await checkLoginStatus(apiBaseUrl);
       await refreshPlayRecords();
+      await useHomeStore.getState().fetchInitialData();
 
       // Save credentials on successful login
       await LoginCredentialsManager.save({ username, password });
