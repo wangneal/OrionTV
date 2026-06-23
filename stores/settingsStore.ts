@@ -67,9 +67,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         storageConfig.setStorageType(config.StorageType);
         set({ serverConfig: config });
       }
-    } catch (error) {
+    } catch (error: any) {
       set({ serverConfig: null });
-      logger.error("Failed to fetch server config:", error);
+      logger.error("Failed to fetch server config:", error?.message || error);
+      Toast.show({ type: "error", text1: "连接失败", text2: error?.message || "未知错误" });
     } finally {
       set({ isLoadingServerConfig: false });
     }
