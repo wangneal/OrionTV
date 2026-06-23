@@ -171,33 +171,33 @@ export default function SettingsScreen() {
       ),
       key: "remote",
     },
-    {
-      component: (
-        <APIConfigSection
-          ref={apiSectionRef}
-          onChanged={markAsChanged}
-          hideDescription={deviceType === "mobile"}
-          onFocus={() => {
-            setCurrentFocusIndex(1);
-            setCurrentSection("api");
-          }}
-        />
-      ),
-      key: "api",
-    },
-    deviceType !== "mobile" && {
-      component: (
-        <LiveStreamSection
-          ref={liveStreamSectionRef}
-          onChanged={markAsChanged}
-          onFocus={() => {
-            setCurrentFocusIndex(2);
-            setCurrentSection("livestream");
-          }}
-        />
-      ),
-      key: "livestream",
-    },
+    // {
+    //   component: (
+    //     <APIConfigSection
+    //       ref={apiSectionRef}
+    //       onChanged={markAsChanged}
+    //       hideDescription={deviceType === "mobile"}
+    //       onFocus={() => {
+    //         setCurrentFocusIndex(1);
+    //         setCurrentSection("api");
+    //       }}
+    //     />
+    //   ),
+    //   key: "api",
+    // },
+    // deviceType !== "mobile" && {
+    //   component: (
+    //     <LiveStreamSection
+    //       ref={liveStreamSectionRef}
+    //       onChanged={markAsChanged}
+    //       onFocus={() => {
+    //         setCurrentFocusIndex(2);
+    //         setCurrentSection("livestream");
+    //       }}
+    //     />
+    //   ),
+    //   key: "livestream",
+    // },
     Platform.OS === "android" && {
       component: <UpdateSection />,
       key: "update",

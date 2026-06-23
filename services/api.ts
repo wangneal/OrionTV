@@ -235,6 +235,11 @@ export class API {
     const response = await this._fetch(url);
     return response.json();
   }
+
+  async getLiveSources(): Promise<{ success: boolean; data: { key: string; name: string; url: string; channelNumber?: number; disabled?: boolean }[] }> {
+    const response = await this._fetch("/api/live/sources");
+    return response.json();
+  }
 }
 
 // 默认实例

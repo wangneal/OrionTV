@@ -1,20 +1,35 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, FlatList, StyleSheet, ActivityIndicator, Modal, useTVEventHandler, HWEvent, Text } from "react-native";
+import { View, FlatList, StyleSheet, ActivityIndicator, Modal, useTVEventHandler, HWEvent, Text, Alert } from "react-native";
 import LivePlayer from "@/components/LivePlayer";
 import { fetchAndParseM3u, getPlayableUrl, Channel } from "@/services/m3u";
 import { ThemedView } from "@/components/ThemedView";
 import { StyledButton } from "@/components/StyledButton";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { api } from "@/services/api";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { getCommonResponsiveStyles } from "@/utils/ResponsiveStyles";
 import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
 import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
 import { DeviceUtils } from "@/utils/DeviceUtils";
+import Toast from "react-native-toast-message";
+import Logger from "@/utils/Logger";
+
+const logger = Logger.withTag('Live');
+
+// 验活：HEAD 请求，超时 3 秒
+async function checkLiveSource(url: string): Promise<{ alive: boolean; latency: number }> {
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+    clearTimeout(timeout);
+    return { alive: response.ok, latency: Date.now() - start };
+  } catch {
+    return { alive: false, latency: Infinity };
+  }
+}
 
 export default function LiveScreen() {
-  const { m3uUrl } = useSettingsStore();
-  
-  // 响应式布局配置
   const responsiveConfig = useResponsiveLayout();
   const commonStyles = getCommonResponsiveStyles(responsiveConfig);
   const { deviceType, spacing } = responsiveConfig;
@@ -23,7 +38,6 @@ export default function LiveScreen() {
   const [groupedChannels, setGroupedChannels] = useState<Record<string, Channel[]>>({});
   const [channelGroups, setChannelGroups] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>("");
-
   const [currentChannelIndex, setCurrentChannelIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isChannelListVisible, setIsChannelListVisible] = useState(false);
@@ -32,61 +46,90 @@ export default function LiveScreen() {
 
   const selectedChannelUrl = channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url) : null;
 
+  const showChannelTitle = useCallback((title: string) => {
+    setChannelTitle(title);
+    clearTimeout(titleTimer.current);
+    titleTimer.current = setTimeout(() => setChannelTitle(null), 3000);
+  }, []);
+
+  // 自动获取直播源 → 验活 → 选延迟最低的 → 解析 M3U
   useEffect(() => {
     const loadChannels = async () => {
-      if (!m3uUrl) return;
       setIsLoading(true);
-      const parsedChannels = await fetchAndParseM3u(m3uUrl);
-      setChannels(parsedChannels);
-
-      const groups: Record<string, Channel[]> = parsedChannels.reduce((acc, channel) => {
-        const groupName = channel.group || "Other";
-        if (!acc[groupName]) {
-          acc[groupName] = [];
+      try {
+        const result = await api.getLiveSources();
+        const sources = (result.data || []).filter(s => !s.disabled && s.url);
+        if (sources.length === 0) {
+          Alert.alert("提示", "没有可用的直播源");
+          setIsLoading(false);
+          return;
         }
-        acc[groupName].push(channel);
-        return acc;
-      }, {} as Record<string, Channel[]>);
 
-      const groupNames = Object.keys(groups);
-      setGroupedChannels(groups);
-      setChannelGroups(groupNames);
-      setSelectedGroup(groupNames[0] || "");
+        const checks = await Promise.all(
+          sources.map(async (source) => {
+            const { alive, latency } = await checkLiveSource(source.url);
+            return { ...source, alive, latency };
+          })
+        );
 
-      if (parsedChannels.length > 0) {
-        showChannelTitle(parsedChannels[0].name);
+        const aliveSources = checks.filter(s => s.alive).sort((a, b) => a.latency - b.latency);
+        if (aliveSources.length === 0) {
+          Alert.alert("提示", "直播源不可用，请稍后重试");
+          setIsLoading(false);
+          return;
+        }
+
+        const bestSource = aliveSources[0];
+        logger.info(`Selected live source: ${bestSource.name} (latency: ${bestSource.latency}ms)`);
+        Toast.show({ type: "info", text1: `使用直播源: ${bestSource.name}`, text2: `延迟 ${bestSource.latency}ms` });
+
+        const parsedChannels = await fetchAndParseM3u(bestSource.url);
+        setChannels(parsedChannels);
+
+        const groups: Record<string, Channel[]> = parsedChannels.reduce((acc, channel) => {
+          const groupName = channel.group || "Other";
+          if (!acc[groupName]) acc[groupName] = [];
+          acc[groupName].push(channel);
+          return acc;
+        }, {} as Record<string, Channel[]>);
+
+        const groupNames = Object.keys(groups);
+        setGroupedChannels(groups);
+        setChannelGroups(groupNames);
+        setSelectedGroup(groupNames[0] || "");
+
+        if (parsedChannels.length > 0) {
+          showChannelTitle(parsedChannels[0].name);
+        }
+      } catch (error) {
+        logger.error("Failed to load live sources:", error);
+        Toast.show({ type: "error", text1: "获取直播源失败" });
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     loadChannels();
-  }, [m3uUrl]);
+  }, [showChannelTitle]);
 
-  const showChannelTitle = (title: string) => {
-    setChannelTitle(title);
-    if (titleTimer.current) clearTimeout(titleTimer.current);
-    titleTimer.current = setTimeout(() => setChannelTitle(null), 3000);
-  };
-
-  const handleSelectChannel = (channel: Channel) => {
+  const handleSelectChannel = useCallback((channel: Channel) => {
     const globalIndex = channels.findIndex((c) => c.id === channel.id);
     if (globalIndex !== -1) {
       setCurrentChannelIndex(globalIndex);
       showChannelTitle(channel.name);
       setIsChannelListVisible(false);
     }
-  };
+  }, [channels, showChannelTitle]);
 
   const changeChannel = useCallback(
     (direction: "next" | "prev") => {
       if (channels.length === 0) return;
-      let newIndex =
-        direction === "next"
-          ? (currentChannelIndex + 1) % channels.length
-          : (currentChannelIndex - 1 + channels.length) % channels.length;
+      const newIndex = direction === "next"
+        ? (currentChannelIndex + 1) % channels.length
+        : (currentChannelIndex - 1 + channels.length) % channels.length;
       setCurrentChannelIndex(newIndex);
       showChannelTitle(channels[newIndex].name);
     },
-    [channels, currentChannelIndex]
+    [channels, currentChannelIndex, showChannelTitle]
   );
 
   const handleTVEvent = useCallback(
@@ -102,7 +145,6 @@ export default function LiveScreen() {
 
   useTVEventHandler(deviceType === 'tv' ? handleTVEvent : () => {});
 
-  // 动态样式
   const dynamicStyles = createResponsiveStyles(deviceType, spacing);
 
   const renderLiveContent = () => (
@@ -170,10 +212,7 @@ export default function LiveScreen() {
     </ThemedView>
   );
 
-  // 根据设备类型决定是否包装在响应式导航中
-  if (deviceType === 'tv') {
-    return content;
-  }
+  if (deviceType === 'tv') return content;
 
   return (
     <ResponsiveNavigation>
@@ -189,9 +228,7 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
   const minTouchTarget = DeviceUtils.getMinTouchTargetSize();
 
   return StyleSheet.create({
-    container: {
-      flex: 1,
-    },
+    container: { flex: 1 },
     modalContainer: {
       flex: 1,
       flexDirection: "row",
@@ -211,36 +248,27 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
       fontSize: isMobile ? 18 : 16,
       fontWeight: "bold",
     },
-    listContainer: {
-      flex: 1,
-      flexDirection: isMobile ? "column" : "row",
-    },
+    listContainer: { flex: 1, flexDirection: isMobile ? "column" : "row" },
     groupColumn: {
       flex: isMobile ? 0 : 1,
       marginRight: isMobile ? 0 : spacing / 2,
       marginBottom: isMobile ? spacing : 0,
       maxHeight: isMobile ? 120 : undefined,
     },
-    channelColumn: {
-      flex: isMobile ? 1 : 2,
-    },
+    channelColumn: { flex: isMobile ? 1 : 2 },
     groupButton: {
       paddingVertical: isMobile ? minTouchTarget / 4 : 8,
       paddingHorizontal: spacing / 2,
       marginVertical: isMobile ? 2 : 4,
       minHeight: isMobile ? minTouchTarget * 0.7 : undefined,
     },
-    groupButtonText: {
-      fontSize: isMobile ? 14 : 13,
-    },
+    groupButtonText: { fontSize: isMobile ? 14 : 13 },
     channelItem: {
       paddingVertical: isMobile ? minTouchTarget / 5 : 6,
       paddingHorizontal: spacing,
       marginVertical: isMobile ? 2 : 3,
       minHeight: isMobile ? minTouchTarget * 0.8 : undefined,
     },
-    channelItemText: {
-      fontSize: isMobile ? 14 : 12,
-    },
+    channelItemText: { fontSize: isMobile ? 14 : 12 },
   });
 };
