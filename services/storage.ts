@@ -315,7 +315,7 @@ export class SearchHistoryManager {
 export class SettingsManager {
   static async get(): Promise<AppSettings> {
     const defaultSettings: AppSettings = {
-      apiBaseUrl: "",
+      apiBaseUrl: "https://tv.930726.xyz",
       remoteInputEnabled: true,
       videoSource: {
         enabledAll: true,

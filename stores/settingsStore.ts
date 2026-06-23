@@ -32,7 +32,7 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  apiBaseUrl: "",
+  apiBaseUrl: "https://tv.930726.xyz",
   m3uUrl: "",
   liveStreamSources: [],
   remoteInputEnabled: false,
