@@ -19,13 +19,18 @@ const logger = Logger.withTag('Live');
 // 验活：HEAD 请求，超时 3 秒
 async function checkLiveSource(url: string): Promise<{ alive: boolean; latency: number }> {
   const start = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+    const response = await fetch(url, { method: 'GET', signal: controller.signal });
     clearTimeout(timeout);
-    return { alive: response.ok, latency: Date.now() - start };
+    const alive = response.ok;
+    try {
+      controller.abort();
+    } catch {}
+    return { alive, latency: Date.now() - start };
   } catch {
+    clearTimeout(timeout);
     return { alive: false, latency: Infinity };
   }
 }
