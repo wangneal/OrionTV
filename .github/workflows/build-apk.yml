@@ -43,7 +43,6 @@ jobs:
         run: |
           mkdir -p artifacts
           cp android/app/build/outputs/apk/release/app-release.apk artifacts/yueguang.${{ steps.package-version.outputs.version }}.apk
-          cp android/app/build/outputs/apk/release/app-release.apk artifacts/orionTV.${{ steps.package-version.outputs.version }}.apk
 
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
@@ -53,6 +52,6 @@ jobs:
           body: Automated release for version v${{ steps.package-version.outputs.version }}.
           draft: false
           prerelease: false
-          files: artifacts/*.apk
+          files: artifacts/yueguang.${{ steps.package-version.outputs.version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
