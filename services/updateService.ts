@@ -140,6 +140,9 @@ class UpdateService {
 
         const result = await downloadResumable.downloadAsync();
         if (result && result.uri) {
+          if (result.status && (result.status < 200 || result.status >= 300)) {
+            throw new Error(`Download failed: HTTP ${result.status}`);
+          }
           logger.debug(`APK downloaded to ${result.uri}`);
           return result.uri;
         } else {

@@ -50,7 +50,9 @@ export default function LiveScreen() {
 
   const showChannelTitle = useCallback((title: string) => {
     setChannelTitle(title);
-    clearTimeout(titleTimer.current);
+    if (titleTimer.current) {
+      clearTimeout(titleTimer.current);
+    }
     titleTimer.current = setTimeout(() => setChannelTitle(null), 3000);
   }, []);
 
