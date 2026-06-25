@@ -75,8 +75,10 @@ export interface ServerConfig {
   StorageType: "localstorage" | "redis" | string;
 }
 
+const DEFAULT_API_BASE_URL = "https://tv.930726.xyz";
+
 export class API {
-  public baseURL: string = "";
+  public baseURL: string = DEFAULT_API_BASE_URL;
 
   constructor(baseURL?: string) {
     if (baseURL) {
@@ -88,12 +90,45 @@ export class API {
     this.baseURL = url;
   }
 
-  private async _fetch(url: string, options: RequestInit = {}): Promise<Response> {
+  /**
+   * 从 Set-Cookie header 值中提取 name=value 部分，用于 Cookie 请求头。
+   * Set-Cookie 格式: auth=<value>; Path=/; Expires=...
+   * Cookie 请求头只需要 name=value 部分。
+   */
+  private _extractCookieForRequest(setCookieValue: string): string {
+    return setCookieValue.split(';')[0].trim();
+  }
+
+  private async _fetch(
+    url: string,
+    options: RequestInit = {},
+    skipRefresh = false
+  ): Promise<Response> {
     if (!this.baseURL) {
       throw new Error("API_URL_NOT_SET");
     }
 
-    const response = await fetch(`${this.baseURL}${url}`, options);
+    // 显式注入 Cookie header，不依赖 RN 平台 cookie jar
+    // （Android OkHttp 默认不持久化 cookie，iOS NSURLSession 行为不可控）
+    const authCookies = await AsyncStorage.getItem('authCookies');
+    const headers = new Headers(options.headers);
+    if (authCookies && !headers.has('Cookie')) {
+      headers.set('Cookie', this._extractCookieForRequest(authCookies));
+    }
+
+    const response = await fetch(`${this.baseURL}${url}`, {
+      ...options,
+      headers,
+    });
+
+    // 401 拦截：尝试 refresh token 后重试一次
+    if (response.status === 401 && !skipRefresh) {
+      const refreshed = await this.tryRefresh();
+      if (refreshed) {
+        return this._fetch(url, options, true);
+      }
+      throw new Error("UNAUTHORIZED");
+    }
 
     if (response.status === 401) {
       throw new Error("UNAUTHORIZED");
@@ -106,12 +141,43 @@ export class API {
     return response;
   }
 
+  /**
+   * 尝试刷新 access token。
+   * 成功返回 true（authCookies 已更新到 AsyncStorage），失败返回 false。
+   */
+  async tryRefresh(): Promise<boolean> {
+    try {
+      const authCookies = await AsyncStorage.getItem('authCookies');
+      const headers = new Headers();
+      if (authCookies) {
+        headers.set('Cookie', this._extractCookieForRequest(authCookies));
+      }
+
+      const response = await fetch(`${this.baseURL}/api/auth/refresh`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (!response.ok) return false;
+
+      // 更新 AsyncStorage 中的 authCookies
+      const setCookie = response.headers.get("Set-Cookie");
+      if (setCookie) {
+        await AsyncStorage.setItem("authCookies", setCookie);
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async login(username?: string | undefined, password?: string): Promise<{ ok: boolean }> {
     const response = await this._fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
-    });
+    }, true);
 
     // 存储cookie到AsyncStorage
     const cookies = response.headers.get("Set-Cookie");
