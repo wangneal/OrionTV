@@ -10,22 +10,19 @@ const logger = Logger.withTag('AuthStore');
 
 /**
  * 尝试自动登录：
- * - localstorage 模式：直接调 api.login()（服务器用 env PASSWORD 校验）
+ * - localstorage 模式：用 LoginCredentialsManager 保存的密码调 api.login()
  * - DB 模式：用 LoginCredentialsManager 保存的凭据登录
  */
 const attemptAutoLogin = async (storageType: string): Promise<boolean> => {
-  if (storageType === "localstorage") {
-    try {
-      const result = await api.login();
-      return !!result?.ok;
-    } catch {
-      return false;
-    }
-  }
   const credentials = await LoginCredentialsManager.get();
-  if (!credentials) return false;
+  const username = credentials?.username;
+  const password = credentials?.password;
+  if (!password) return false;
   try {
-    const result = await api.login(credentials.username, credentials.password);
+    const result = await api.login(
+      storageType === "localstorage" ? undefined : username,
+      password
+    );
     return !!result?.ok;
   } catch {
     return false;

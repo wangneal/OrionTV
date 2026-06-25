@@ -10,6 +10,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import LoginModal from "@/components/LoginModal";
+import { RemoteControlModal } from "@/components/RemoteControlModal";
 import useAuthStore from "@/stores/authStore";
 import { useUpdateStore, initUpdateStore } from "@/stores/updateStore";
 import { UpdateModal } from "@/components/UpdateModal";
@@ -97,6 +98,7 @@ export default function RootLayout() {
         </View>
         <Toast />
         <LoginModal />
+        <RemoteControlModal />
         <UpdateModal />
       </ThemeProvider>
     </SafeAreaProvider>

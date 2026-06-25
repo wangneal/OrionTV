@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Modal, View, TextInput, StyleSheet, ActivityIndicator, Alert, Keyboard, InteractionManager } from "react-native";
+import { Modal, View, TextInput, StyleSheet, ActivityIndicator, Alert, Keyboard, InteractionManager, ScrollView } from "react-native";
 import { usePathname } from "expo-router";
+import { Smartphone } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import useAuthStore from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import useHomeStore from "@/stores/homeStore";
 import { api } from "@/services/api";
 import { LoginCredentialsManager } from "@/services/storage";
@@ -13,7 +15,8 @@ import { StyledButton } from "./StyledButton";
 
 const LoginModal = () => {
   const { isLoginModalVisible, hideLoginModal, checkLoginStatus } = useAuthStore();
-  const { serverConfig, apiBaseUrl } = useSettingsStore();
+  const { serverConfig, apiBaseUrl, remoteInputEnabled } = useSettingsStore();
+  const { lastMessage, targetPage, clearMessage, showModal } = useRemoteControlStore();
   const { refreshPlayRecords } = useHomeStore();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -77,6 +80,25 @@ const LoginModal = () => {
       setIsModalReady(false);
     };
   }, []);
+
+  // 监听远程输入消息
+  useEffect(() => {
+    if (lastMessage && targetPage === 'login' && isLoginModalVisible) {
+      const realMessage = lastMessage.split("_")[0];
+      // localstorage 模式只有密码框，直接填密码
+      const isLocalStorage = serverConfig?.StorageType === "localstorage";
+      if (isLocalStorage || username) {
+        // 用户名已填或无需用户名 → 填密码
+        setPassword(realMessage);
+        passwordInputRef.current?.blur();
+      } else {
+        // 用户名为空 → 填用户名，然后聚焦密码框
+        setUsername(realMessage);
+        passwordInputRef.current?.focus();
+      }
+      clearMessage();
+    }
+  }, [lastMessage, targetPage, isLoginModalVisible, username, serverConfig, clearMessage]);
 
   const handleLogin = async () => {
     const isLocalStorage = serverConfig?.StorageType === "localstorage";
@@ -146,6 +168,7 @@ const LoginModal = () => {
       onRequestClose={hideLoginModal}
     >
       <View style={styles.overlay}>
+        <ScrollView contentContainerStyle={styles.scrollContent} alwaysBounceVertical={false}>
         <ThemedView style={styles.container}>
           <ThemedText style={styles.title}>需要登录</ThemedText>
           <ThemedText style={styles.subtitle}>服务器需要验证您的身份</ThemedText>
@@ -182,7 +205,19 @@ const LoginModal = () => {
           >
             {isLoading && <ActivityIndicator color="#fff" />}
           </StyledButton>
+          {remoteInputEnabled && (
+            <StyledButton
+              text="远程输入"
+              onPress={() => showModal('login')}
+              variant="ghost"
+              style={styles.remoteButton}
+              textStyle={styles.remoteButtonText}
+            >
+              <Smartphone color="#ccc" size={18} />
+            </StyledButton>
+          )}
         </ThemedView>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -192,13 +227,17 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingVertical: 20,
   },
   container: {
-    width: "80%",
-    maxWidth: 400,
-    padding: 24,
+    width: "90%",
+    maxWidth: 480,
+    padding: 28,
     borderRadius: 12,
     alignItems: "center",
   },
@@ -210,24 +249,35 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: "#ccc",
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: "center",
   },
   input: {
     width: "100%",
-    height: 50,
+    height: 48,
     backgroundColor: "#333",
     borderRadius: 8,
     paddingHorizontal: 16,
     color: "#fff",
     fontSize: 16,
-    marginBottom: 20,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: "#555",
   },
   button: {
     width: "100%",
-    height: 50,
+    height: 48,
+  },
+  remoteButton: {
+    width: "100%",
+    height: 44,
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  remoteButtonText: {
+    fontSize: 14,
+    color: "#ccc",
   },
 });
 

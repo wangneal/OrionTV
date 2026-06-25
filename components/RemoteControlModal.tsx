@@ -26,7 +26,7 @@ export const RemoteControlModal: React.FC = () => {
           <ThemedText style={styles.instructions}>
             使用手机扫描上方二维码，即可在浏览器中向 TV 发送消息。或者访问{serverUrl}
           </ThemedText>
-          <StyledButton text="关闭" onPress={hideModal} style={styles.button} variant="primary" />
+          <StyledButton text="关闭" onPress={hideModal} style={styles.button} variant="primary" hasTVPreferredFocus />
         </ThemedView>
       </View>
     </Modal>
